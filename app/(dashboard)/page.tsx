@@ -9,7 +9,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-
 export default function Page() {
   return (
     <Empty className="min-h-svh border-none">
