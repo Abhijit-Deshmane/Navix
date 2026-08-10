@@ -2,6 +2,10 @@ import toposort from "toposort"
 import { logger, task } from "@trigger.dev/sdk"
 import { Stagehand } from "@browserbasehq/stagehand"
 import { nodeExecutors } from "@/features/workflows/nodes/node-executors"
+import {
+  interpolate,
+  type NodeOutputs,
+} from "@/features/workflows/lib/interpolate"
 import { getWorkflow } from "@/features/workflows/data"
 
 // The Trigger.dev task the Run button fires. It loads the saved graph, works out
@@ -49,13 +53,26 @@ export const runWorkflowTask = task({
       return stagehand
     }
 
+    // Each node's result, keyed by its id, so later nodes can pull from it.
+    // Because we walk in dependency order, every id a node references is already
+    // populated by the time we run it.
+    const outputs: NodeOutputs = {}
+
     for (const id of order) {
       const node = byId.get(id)!
       logger.log(`Running step: ${node.data.title}`)
-      // TODO: actually execute the node instead of just logging it, and report
-      // its progress so the UI can watch the run live.
+      // TODO: report per-node progress so the UI can watch the run live.
       const executor = nodeExecutors[node.data.type]
-      if (executor) await executor({ values: node.data.values, getStagehand })
+      if (!executor) continue
+
+      // Swap {{ nodeId.path }} placeholders for upstream output before running.
+      const values = Object.fromEntries(
+        Object.entries(node.data.values).map(([key, text]) => [
+          key,
+          interpolate({ text, outputs }),
+        ])
+      )
+      outputs[id] = await executor({ values, getStagehand })
     }
 
     await stagehand?.close()
