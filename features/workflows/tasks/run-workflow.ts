@@ -1,5 +1,6 @@
 import toposort from "toposort"
 import { logger, metadata, task } from "@trigger.dev/sdk"
+import type { DeserializedJson } from "@trigger.dev/core"
 import { Stagehand } from "@browserbasehq/stagehand"
 import { nodeExecutors } from "@/features/workflows/nodes/node-executors"
 import {
@@ -7,12 +8,24 @@ import {
   type NodeOutputs,
 } from "@/features/workflows/lib/interpolate"
 import { getWorkflow } from "@/features/workflows/data"
+import type { NodeType } from "@/features/workflows/nodes/node-registry"
 
 // One entry per node the run will walk, published to the run's metadata under
-// "steps" so the canvas can watch each node move through its lifecycle live.
+// "steps" so the canvas — and the run console below it — can watch each node
+// move through its lifecycle live and inspect what it produced.
 export type RunStep = {
   nodeId: string
+  // The node's registry type (for its icon/accent) and title, denormalized so
+  // the console can render a step without re-reading the graph.
+  type: NodeType
+  title: string
   status: "pending" | "running" | "done" | "failed"
+  // Wall-clock time the executor took, set once the step leaves "running".
+  durationMs?: number
+  // Whatever the executor returned, kept for the console's per-step detail view.
+  output?: unknown
+  // The thrown error's message, set only when status is "failed".
+  error?: string
 }
 
 // The Trigger.dev task the Run button fires. It loads the saved graph, works out
@@ -41,13 +54,26 @@ export const runWorkflowTask = task({
     logger.log(`Running workflow ${workflow.name}`, { steps: order.length })
 
     // Seed every step as "pending" up front and publish, so the canvas can render
-    // the full run as a list of spinners before any node starts. We mutate these
-    // entries in place and re-publish on every status change below.
-    const steps: RunStep[] = order.map((nodeId) => ({
-      nodeId,
-      status: "pending",
-    }))
-    metadata.set("steps", steps)
+    // the full run as a list of spinners before any node starts. type and title
+    // are denormalized from the graph so the console can label each step without
+    // it. We mutate these entries in place and re-publish on every status change.
+    const steps: RunStep[] = order.map((nodeId) => {
+      const node = byId.get(nodeId)!
+      return {
+        nodeId,
+        type: node.data.type,
+        title: node.data.title,
+        status: "pending",
+      }
+    })
+
+    // steps carries an arbitrary `output`, which is wider than trigger's
+    // DeserializedJson metadata type; the values are JSON at runtime, so cast at
+    // this one boundary rather than constraining the shape the console reads.
+    const publishSteps = () =>
+      metadata.set("steps", steps as unknown as DeserializedJson[])
+
+    publishSteps()
 
     // The run owns one Browserbase session, opened lazily on the first browser step
     // and reused by every later one, so the recording spans the whole flow. The
@@ -80,14 +106,21 @@ export const runWorkflowTask = task({
       const node = byId.get(id)!
       logger.log(`Running step: ${node.data.title}`)
 
+      // A node with no executor (the start trigger) does no work and produces no
+      // output — mark it done rather than leaving it "pending", which reads as
+      // skipped forever in the console.
       const executor = nodeExecutors[node.data.type]
-      if (!executor) continue
+      if (!executor) {
+        step.status = "done"
+        publishSteps()
+        continue
+      }
 
       // Mark running before the executor and flush immediately: the "done" set
       // below happens before the SDK's next background flush, so without forcing
       // it here the "running" state is overwritten and the canvas never spins.
       step.status = "running"
-      metadata.set("steps", steps)
+      publishSteps()
       await metadata.flush()
 
       // Swap {{ nodeId.path }} placeholders for upstream output before running.
@@ -98,21 +131,29 @@ export const runWorkflowTask = task({
         ])
       )
 
+      // Time the executor so the console can show how long the step took, on
+      // both the success and failure paths.
+      const startedAt = Date.now()
       try {
-        outputs[id] = await executor({ values, getStagehand })
+        const output = await executor({ values, getStagehand })
+        outputs[id] = output
+        step.output = output
       } catch (error) {
         // Flush the "failed" state before the throw unwinds the run: a thrown run
         // returns no output, so this flushed metadata is the only way the canvas
-        // ever learns which node failed.
+        // ever learns which node failed — and the only place its error survives.
         step.status = "failed"
-        metadata.set("steps", steps)
+        step.durationMs = Date.now() - startedAt
+        step.error = error instanceof Error ? error.message : String(error)
+        publishSteps()
         await metadata.flush()
         await stagehand?.close()
         throw error
       }
 
       step.status = "done"
-      metadata.set("steps", steps)
+      step.durationMs = Date.now() - startedAt
+      publishSteps()
     }
 
     await stagehand?.close()
