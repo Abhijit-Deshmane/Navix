@@ -23,9 +23,9 @@ import { Label } from "@/components/ui/label"
 import { ResizablePanel } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
 
 import { deleteWorkflowAction, runWorkflowAction } from "@/features/workflows/actions"
+import { NodeIcon } from "@/features/workflows/components/node-icon"
 import { useUpstreamConnections } from "@/features/workflows/hooks/use-upstream-connections"
 import { validateGraph } from "@/features/workflows/lib/validate-graph"
 import {
@@ -45,23 +45,6 @@ import {
 // ---------------------------------------------------------------------------
 // Shared pieces — used by both the Toolbar and the Editor.
 // ---------------------------------------------------------------------------
-
-// The accent-colored icon chip, mirroring the node on the canvas.
-function NodeIcon({ type, className }: { type: NodeType; className?: string }) {
-  const def = nodeRegistry[type]
-  const Icon = def.icon
-  return (
-    <span
-      className={cn(
-        "flex size-6 shrink-0 items-center justify-center rounded-md",
-        def.accent,
-        className
-      )}
-    >
-      <Icon className="size-3.5" />
-    </span>
-  )
-}
 
 // A titled, scrollable panel. Each tab renders its content inside one.
 function Section({
