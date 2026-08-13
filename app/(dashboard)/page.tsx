@@ -1,6 +1,5 @@
-import { PlusIcon, WorkflowIcon } from "lucide-react"
+import { WorkflowIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyContent,
@@ -9,6 +8,8 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { NewWorkflowButton } from "@/features/workflows/components/new-workflow-button"
+
 export default function Page() {
   return (
     <Empty className="min-h-svh border-none">
@@ -22,10 +23,7 @@ export default function Page() {
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button>
-          <PlusIcon />
-          New workflow
-        </Button>
+        <NewWorkflowButton />
       </EmptyContent>
     </Empty>
   )

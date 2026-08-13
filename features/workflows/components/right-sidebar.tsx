@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useReactFlow, useStore } from "@xyflow/react"
-import { Lock, MoreHorizontal, Play, Trash2 } from "lucide-react"
+import { Lock, MoreHorizontal, Play, Square, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -24,8 +24,13 @@ import { ResizablePanel } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
-import { deleteWorkflowAction, runWorkflowAction } from "@/features/workflows/actions"
+import {
+  cancelWorkflowRunAction,
+  deleteWorkflowAction,
+  runWorkflowAction,
+} from "@/features/workflows/actions"
 import { NodeIcon } from "@/features/workflows/components/node-icon"
+import { useLiveRun } from "@/features/workflows/components/workflow-runs-provider"
 import { useProPlan } from "@/features/workflows/hooks/use-pro-plan"
 import { useUpstreamConnections } from "@/features/workflows/hooks/use-upstream-connections"
 import { validateGraph } from "@/features/workflows/lib/validate-graph"
@@ -349,10 +354,37 @@ function ActionsMenu({ workflowId }: { workflowId: string }) {
   )
 }
 
-// Kicks off a run of the current workflow.
+// Toggles between running the current workflow and stopping the run in flight.
+// While a run is live it becomes a Stop button that cancels that run; otherwise
+// it validates the graph and kicks off a new run.
 function RunButton({ workflowId }: { workflowId: string }) {
   const { getNodes, getEdges } = useReactFlow<StepNodeType>()
   const [isPending, startTransition] = useTransition()
+  // The run in flight, if any. At most one is live at a time, so its presence
+  // decides which mode the button is in.
+  const liveRun = useLiveRun()
+
+  if (liveRun) {
+    return (
+      <Button
+        size="sm"
+        variant="destructive"
+        disabled={isPending}
+        onClick={() => {
+          startTransition(async () => {
+            try {
+              await cancelWorkflowRunAction(liveRun.id)
+            } catch {
+              toast.error("Couldn't stop the run.")
+            }
+          })
+        }}
+      >
+        <Square fill="currentColor" />
+        Stop
+      </Button>
+    )
+  }
 
   return (
     <Button
@@ -360,7 +392,6 @@ function RunButton({ workflowId }: { workflowId: string }) {
       variant="secondary"
       disabled={isPending}
       onClick={() => {
-        // TODO: validate the graph and run the workflow (toggle to Stop while running).
         const graph = { nodes: getNodes(), edges: getEdges() }
         const problems = validateGraph(graph)
         if (problems.length > 0) {
