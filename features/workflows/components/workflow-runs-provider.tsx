@@ -94,6 +94,14 @@ export function useLatestRunSteps(): LatestRunSteps {
   }, [runs])
 }
 
+// The run currently in flight, if any — at most one is live at a time. A Stop
+// button reads this to know whether there's a run to cancel and, if so, its id.
+export function useLiveRun(): WorkflowRun | undefined {
+  const { runs } = useWorkflowRuns()
+
+  return useMemo(() => runs.find(isRunLive), [runs])
+}
+
 // The Browserbase session id a finished run drove, read from its final output so
 // a panel can fetch the replay. Only the output carries it — the recording lags
 // the session close, so the live metadata never has it — so an in-flight or
