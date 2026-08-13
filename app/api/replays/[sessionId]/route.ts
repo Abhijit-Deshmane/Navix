@@ -15,9 +15,16 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
-  const { userId, orgId } = await auth()
+  const { userId, orgId, has } = await auth()
   if (!userId || !orgId) {
     return new Response("Unauthorized", { status: 401 })
+  }
+
+  // Session replay is a Pro feature. Gate it here, not just in the UI, so a
+  // non-pro org can't pull a recording by calling the route directly. `has`
+  // evaluates the active org, which we've confirmed exists above.
+  if (!has({ plan: "pro" })) {
+    return new Response("Pro plan required", { status: 403 })
   }
 
   const { sessionId } = await params

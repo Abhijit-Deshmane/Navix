@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useReactFlow, useStore } from "@xyflow/react"
-import { MoreHorizontal, Play, Trash2 } from "lucide-react"
+import { Lock, MoreHorizontal, Play, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea"
 
 import { deleteWorkflowAction, runWorkflowAction } from "@/features/workflows/actions"
 import { NodeIcon } from "@/features/workflows/components/node-icon"
+import { useProPlan } from "@/features/workflows/hooks/use-pro-plan"
 import { useUpstreamConnections } from "@/features/workflows/hooks/use-upstream-connections"
 import { validateGraph } from "@/features/workflows/lib/validate-graph"
 import {
@@ -204,6 +205,11 @@ const sections: { kind: StepNodeKind; label: string }[] = [
 // Every node type from the registry, filtered into the groups below.
 const definitions = Object.values(nodeRegistry)
 
+// Node types that only orgs on the Pro plan can add. The Agent node is our most
+// expensive node, so it's gated; every other node stays free to keep workflow
+// building open to everyone.
+const premiumNodes = new Set<NodeType>(["agent"])
+
 // The Toolbar tab: a button per node type that adds it to the canvas.
 function Palette() {
   // The shared React Flow store (lifted to a provider above the canvas and this
@@ -212,8 +218,22 @@ function Palette() {
   // The pane's measured size, used to find the center of the current view.
   const width = useStore((s) => s.width)
   const height = useStore((s) => s.height)
+  // Whether the active org is on Pro, plus a way to send them to upgrade. Gates
+  // the premium nodes below.
+  const { isLoaded, isPro, goToUpgrade } = useProPlan()
+
+  // A premium node is locked until the plan check has loaded and confirms Pro.
+  // We wait for `isLoaded` so a Pro org never flashes a locked state on mount.
+  const isLocked = (type: NodeType) =>
+    premiumNodes.has(type) && isLoaded && !isPro
 
   const add = (type: NodeType) => {
+    // Premium nodes route to upgrade instead of being added for non-pro orgs.
+    if (isLocked(type)) {
+      goToUpgrade()
+      return
+    }
+
     const def = nodeRegistry[type]
     const nodes = getNodes()
 
@@ -264,17 +284,25 @@ function Palette() {
             <AccordionContent className="flex flex-col gap-0.5">
               {definitions
                 .filter((def) => def.kind === section.kind)
-                .map((def) => (
-                  <Button
-                    key={def.type}
-                    variant="ghost"
-                    onClick={() => add(def.type as NodeType)}
-                    className="justify-start gap-2.5 px-1.5 text-xs"
-                  >
-                    <NodeIcon type={def.type as NodeType} />
-                    {def.label}
-                  </Button>
-                ))}
+                .map((def) => {
+                  const type = def.type as NodeType
+                  const locked = isLocked(type)
+                  return (
+                    <Button
+                      key={def.type}
+                      variant="ghost"
+                      onClick={() => add(type)}
+                      title={locked ? "Upgrade to Pro to add this node" : undefined}
+                      className="justify-start gap-2.5 px-1.5 text-xs"
+                    >
+                      <NodeIcon type={type} />
+                      {def.label}
+                      {locked && (
+                        <Lock className="ml-auto size-3.5 text-muted-foreground" />
+                      )}
+                    </Button>
+                  )
+                })}
             </AccordionContent>
           </AccordionItem>
         ))}
