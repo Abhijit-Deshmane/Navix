@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs"
 import { auth } from "@clerk/nextjs/server"
 import { NotFoundError } from "@browserbasehq/sdk"
 
@@ -20,14 +21,25 @@ export async function GET(
     return new Response("Unauthorized", { status: 401 })
   }
 
+  const { sessionId } = await params
+
+  Sentry.getIsolationScope().setAttributes({
+    route: "GET /api/replays/[sessionId]",
+    userId,
+    orgId,
+    sessionId,
+  })
+
   // Session replay is a Pro feature. Gate it here, not just in the UI, so a
   // non-pro org can't pull a recording by calling the route directly. `has`
   // evaluates the active org, which we've confirmed exists above.
   if (!has({ plan: "pro" })) {
+    Sentry.logger.warn("Session replay denied — Pro plan required", {
+      orgId,
+      sessionId,
+    })
     return new Response("Pro plan required", { status: 403 })
   }
-
-  const { sessionId } = await params
 
   try {
     // Page metadata for the replay: one entry per page the session visited, each
@@ -46,6 +58,12 @@ export async function GET(
       firstPage.pageId
     )
     const m3u8 = await playlist.text()
+
+    Sentry.logger.info("Session replay served", {
+      sessionId,
+      orgId,
+      pageCount: replay.pages.length,
+    })
 
     return new Response(m3u8, {
       status: 200,

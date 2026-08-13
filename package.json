@@ -28,6 +28,8 @@
     "@liveblocks/react-flow": "^3.23.0",
     "@liveblocks/react-ui": "^3.23.0",
     "@neondatabase/serverless": "^1.1.0",
+    "@sentry/nextjs": "^10.70.0",
+    "@sentry/node": "^10.70.0",
     "@shadcn/react": "^0.2.1",
     "@trigger.dev/react-hooks": "4.5.10",
     "@trigger.dev/sdk": "4.5.10",
@@ -62,6 +64,7 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@sentry/esbuild-plugin": "^5.4.0",
     "@tailwindcss/postcss": "^4",
     "@trigger.dev/build": "4.5.10",
     "@types/node": "^20",
