@@ -1,4 +1,6 @@
 import { defineConfig } from "@trigger.dev/sdk";
+import { esbuildPlugin } from "@trigger.dev/build/extensions";
+import sentryEsbuildPlugin from "@sentry/esbuild-plugin";
 
 export default defineConfig({
   project: "proj_dlpllaeeqcnzecwehmzk",
@@ -19,4 +21,17 @@ export default defineConfig({
     },
   },
   dirs: ["features"],
+  build: {
+    extensions: [
+      esbuildPlugin(
+        sentryEsbuildPlugin({
+          org: "abhis-dev-studio",
+          project: "navix",
+          // Find this auth token in settings -> developer settings -> auth tokens
+          authToken: process.env.SENTRY_AUTH_TOKEN,
+        }),
+        { placement: "last", target: "deploy" }
+      ),
+    ],
+  },
 });
